@@ -27,6 +27,29 @@ check_dependencies() {
     fi
 }
 
+prompt_selection() {
+    local prompt="$1"
+    local max_index="$2"
+
+    local user_selection
+    local selection_valid=false
+    while [[ $selection_valid == false ]]; do
+        echo >&2
+        read -p "$prompt" user_selection
+        if [[ -z $user_selection ]]; then
+            user_selection=1
+        fi
+
+        if [[ $user_selection =~ ^[0-9]+$ ]] && [[ $user_selection -ge 1 && $user_selection -le $max_index ]]; then
+            selection_valid=true
+        else
+            echo -e "${RED}Invalid input: please enter a number between 1 and $max_index${COLOR_RESET}" >&2
+        fi
+    done
+
+    echo "$user_selection"
+}
+
 get_camera_input() {
     local cameras
     cameras=$(imagesnap -l 2>&1 | grep -v WARNING | grep "^=>" | sed 's/^=> //')
@@ -41,19 +64,30 @@ get_camera_input() {
     done <<< "$cameras"
 
     local user_selection
-    local selection_valid=false
-    while [[ $selection_valid == false ]]; do
-        echo >&2
-        read -p "Select a camera (1-$((index-1))): " user_selection
-
-        if [[ $user_selection =~ ^[0-9]+$ ]] && [[ $user_selection -ge 1 && $user_selection -le $((index-1)) ]]; then
-            selection_valid=true
-        else
-            echo -e "${RED}Invalid input: please enter a number between 1 and $((index-1))${COLOR_RESET}" >&2
-        fi
-    done
-
+    user_selection=$(prompt_selection "Select a camera (1-$((index-1)), default 1): " "$((index-1))")
     echo "${camera_array[$user_selection]}"
+}
+
+get_microphone_input() {
+    local devices
+    devices=$(hear --audio-input-devices 2>&1 | grep -E '^[0-9]+\.')
+
+    echo "Select microphone input:" >&2
+    local -a microphone_array
+    local index=1
+    while IFS= read -r device; do
+        local microphone_name
+        local microphone_id
+        microphone_name=$(echo "$device" | sed -E 's/^[0-9]+\. *//; s/ \(ID: .*\)$//')
+        microphone_id=$(echo "$device" | sed -E 's/.*\(ID: //; s/\)$//')
+        microphone_array[$index]="$microphone_id"
+        echo "$index) $microphone_name" >&2
+        ((index++))
+    done <<< "$devices"
+
+    local user_selection
+    user_selection=$(prompt_selection "Select a microphone (1-$((index-1)), default 1): " "$((index-1))")
+    echo "${microphone_array[$user_selection]}"
 }
 
 ring_a_bell() {
@@ -82,20 +116,22 @@ main() {
     local selected_camera
     selected_camera=$(get_camera_input)
 
-    echo ""
-    echo "You chose $selected_camera"
-    echo
+    local selected_microphone
+    selected_microphone=$(get_microphone_input)
 
     local starting_timestamp
     starting_timestamp=$(date +"%Y%m%d_%H%M%S")
     local output_dir="local/${starting_timestamp}"
     mkdir -p "$output_dir"
 
-    echo "Listening for \"${TRIGGER}\". Press Ctrl+C to exit."
+    echo ""
+    echo "Listening for \"${TRIGGER}\" on microphone \"$selected_microphone\"."
+    echo "Taking snapshots with \"$selected_camera\" and saving to \"$output_dir\"."
+    echo "Press Ctrl+C to exit."
     echo
 
     while true; do
-        hear --exit-word "$TRIGGER" >/dev/null 2>&1
+        hear --exit-word "$TRIGGER" --input-device-id "$selected_microphone" >/dev/null 2>&1
         take_snapshot "$selected_camera" "$output_dir"
         ring_a_bell
     done
