@@ -2,14 +2,11 @@
 
 set -euo pipefail
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-COLOR_RESET='\033[0m'
+
 TRIGGER="snap"
 SNAPSHOT_DELAY=0
 
-trap 'echo -e "${RED}Error: Script failed${COLOR_RESET}" >&2; exit 1' ERR
+trap 'echo "Error: Script failed" >&2; exit 1' ERR
 
 check_dependencies() {
     local required_commands=("imagesnap" "hear")
@@ -22,28 +19,28 @@ check_dependencies() {
     done
 
     if [[ ${#missing_deps[@]} -gt 0 ]]; then
-        echo -e "${RED}Error: Missing dependencies: ${missing_deps[*]}${COLOR_RESET}" >&2
+        echo "Error: Missing dependencies: ${missing_deps[*]}" >&2
         exit 1
     fi
 }
 
 prompt_selection() {
-    local prompt="$1"
-    local max_index="$2"
+    local max="$1"
+    local min="${2:-1}"
+    local default="${3:-1}"
 
     local user_selection
     local selection_valid=false
     while [[ $selection_valid == false ]]; do
-        echo >&2
-        read -p "$prompt" user_selection
+        read -p "$min-$max, default $default: " user_selection
         if [[ -z $user_selection ]]; then
-            user_selection=1
+            user_selection="$default"
         fi
 
-        if [[ $user_selection =~ ^[0-9]+$ ]] && [[ $user_selection -ge 1 && $user_selection -le $max_index ]]; then
+        if [[ $user_selection =~ ^[0-9]+$ ]] && [[ $user_selection -ge $min && $user_selection -le $max ]]; then
             selection_valid=true
         else
-            echo -e "${RED}Invalid input: please enter a number between 1 and $max_index${COLOR_RESET}" >&2
+            echo "Invalid input: please enter a number between $min and $max" >&2
         fi
     done
 
@@ -64,7 +61,7 @@ get_camera_input() {
     done <<< "$cameras"
 
     local user_selection
-    user_selection=$(prompt_selection "Select a camera (1-$((index-1)), default 1): " "$((index-1))")
+    user_selection=$(prompt_selection "$((index-1))")
     echo "${camera_array[$user_selection]}"
 }
 
@@ -86,7 +83,7 @@ get_microphone_input() {
     done <<< "$devices"
 
     local user_selection
-    user_selection=$(prompt_selection "Select a microphone (1-$((index-1)), default 1): " "$((index-1))")
+    user_selection=$(prompt_selection "$((index-1))")
     echo "${microphone_array[$user_selection]}"
 }
 
@@ -108,7 +105,7 @@ take_snapshot() {
 
     echo -n "Taking ${filename}..."
     imagesnap -w "$SNAPSHOT_DELAY" -q -d "$camera_name" "$filename" 2>/dev/null
-    echo -e " ${GREEN}Done.${COLOR_RESET}"
+    echo " Done."
 }
 
 main() {
@@ -128,8 +125,10 @@ main() {
     local output_dir="local/${starting_timestamp}"
     mkdir -p "$output_dir"
 
-    echo "Listening for \"${TRIGGER}\" on microphone \"$selected_microphone\"."
-    echo "Taking snapshots with \"$selected_camera\" and saving to \"$output_dir\"."
+    echo "Microphone input: $selected_microphone"
+    echo "Camera input:     $selected_camera"
+    echo "Output folder:    $output_dir"
+    echo
     echo "Press Ctrl+C to exit."
     echo
 
