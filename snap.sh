@@ -2,9 +2,10 @@
 
 set -euo pipefail
 
-
 TRIGGER="snap"
 SNAPSHOT_DELAY=0
+TRIGGER_SOUND="tink"
+SUCCESS_SOUND="glass"
 
 trap 'echo "Error: Script failed" >&2; exit 1' ERR
 
@@ -24,6 +25,34 @@ check_dependencies() {
     fi
 }
 
+get_timestamp() {
+    date +"%Y%m%d_%H%M%S"
+}
+
+select_from_list() {
+    local prompt="$1"
+    local list_data="$2"
+    local parser_func="$3"
+    local display_parser="${4:-$parser_func}"
+
+    echo "$prompt" >&2
+    local -a items_array
+    local index=1
+    while IFS= read -r line; do
+        local parsed_value
+        local display_value
+        parsed_value=$($parser_func "$line")
+        display_value=$($display_parser "$line")
+        items_array[$index]="$parsed_value"
+        echo "$index) $display_value" >&2
+        ((index++))
+    done <<< "$list_data"
+
+    local user_selection
+    user_selection=$(prompt_selection "$((index-1))")
+    echo "${items_array[$user_selection]}"
+}
+
 prompt_selection() {
     local max="$1"
     local min="${2:-1}"
@@ -32,7 +61,7 @@ prompt_selection() {
     local user_selection
     local selection_valid=false
     while [[ $selection_valid == false ]]; do
-        read -p "$min-$max, default $default: " user_selection
+        read -r -p "   $min-$max, default $default: " user_selection
         if [[ -z $user_selection ]]; then
             user_selection="$default"
         fi
@@ -47,44 +76,30 @@ prompt_selection() {
     echo "$user_selection"
 }
 
+parse_camera_name() {
+    echo "$1"
+}
+
 get_camera_input() {
     local cameras
     cameras=$(imagesnap -l 2>&1 | grep -v WARNING | grep "^=>" | sed 's/^=> //')
+    select_from_list "Select camera input:" "$cameras" parse_camera_name
+}
 
-    echo "Select camera input:" >&2
-    local -a camera_array
-    local index=1
-    while IFS= read -r camera; do
-        camera_array[$index]="$camera"
-        echo "$index) $camera" >&2
-        ((index++))
-    done <<< "$cameras"
+parse_microphone_id() {
+    local device="$1"
+    echo "$device" | sed -E 's/.*\(ID: //; s/\)$//'
+}
 
-    local user_selection
-    user_selection=$(prompt_selection "$((index-1))")
-    echo "${camera_array[$user_selection]}"
+parse_microphone_name() {
+    local device="$1"
+    echo "$device" | sed -E 's/^[0-9]+\. *//; s/ \(ID: .*\)$//'
 }
 
 get_microphone_input() {
     local devices
     devices=$(hear --audio-input-devices 2>&1 | grep -E '^[0-9]+\.')
-
-    echo "Select microphone input:" >&2
-    local -a microphone_array
-    local index=1
-    while IFS= read -r device; do
-        local microphone_name
-        local microphone_id
-        microphone_name=$(echo "$device" | sed -E 's/^[0-9]+\. *//; s/ \(ID: .*\)$//')
-        microphone_id=$(echo "$device" | sed -E 's/.*\(ID: //; s/\)$//')
-        microphone_array[$index]="$microphone_id"
-        echo "$index) $microphone_name" >&2
-        ((index++))
-    done <<< "$devices"
-
-    local user_selection
-    user_selection=$(prompt_selection "$((index-1))")
-    echo "${microphone_array[$user_selection]}"
+    select_from_list "Select microphone input:" "$devices" parse_microphone_id parse_microphone_name
 }
 
 play_system_sound() {
@@ -100,12 +115,25 @@ take_snapshot() {
     local camera_name="$1"
     local output_dir="$2"
     local timestamp
-    timestamp=$(date +"%Y%m%d_%H%M%S")
+    timestamp=$(get_timestamp)
     local filename="${output_dir}/${timestamp}.jpg"
 
     echo -n "Taking ${filename}..."
     imagesnap -w "$SNAPSHOT_DELAY" -q -d "$camera_name" "$filename" 2>/dev/null
     echo " Done."
+}
+
+run_snapshot_loop() {
+    local selected_camera="$1"
+    local selected_microphone="$2"
+    local output_dir="$3"
+
+    while true; do
+        hear --exit-word "$TRIGGER" --input-device-id "$selected_microphone" >/dev/null 2>&1
+        play_system_sound "$TRIGGER_SOUND"
+        take_snapshot "$selected_camera" "$output_dir"
+        play_system_sound "$SUCCESS_SOUND"
+    done
 }
 
 main() {
@@ -121,23 +149,18 @@ main() {
     echo
 
     local starting_timestamp
-    starting_timestamp=$(date +"%Y%m%d_%H%M%S")
+    starting_timestamp=$(get_timestamp)
     local output_dir="local/${starting_timestamp}"
     mkdir -p "$output_dir"
 
-    echo "Microphone input: $selected_microphone"
     echo "Camera input:     $selected_camera"
+    echo "Microphone input: $selected_microphone"
     echo "Output folder:    $output_dir"
     echo
     echo "Press Ctrl+C to exit."
     echo
 
-    while true; do
-        hear --exit-word "$TRIGGER" --input-device-id "$selected_microphone" >/dev/null 2>&1
-        play_system_sound tink
-        take_snapshot "$selected_camera" "$output_dir"
-        play_system_sound glass
-    done
+    run_snapshot_loop "$selected_camera" "$selected_microphone" "$output_dir"
 }
 
 check_dependencies
