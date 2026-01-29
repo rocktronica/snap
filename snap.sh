@@ -6,8 +6,90 @@ TRIGGER="snap"
 SNAPSHOT_DELAY=0
 TRIGGER_SOUND="tink"
 SUCCESS_SOUND="glass"
+CAMERA_NAME=""
+MICROPHONE_ID=""
+OUTPUT_DIR=""
 
 trap 'echo "Error: Script failed" >&2; exit 1' ERR
+
+usage() {
+    local exit_code="${1:-0}"
+    echo "snap.sh - Voice-triggered camera snapshot tool"
+    echo ""
+    echo "Captures snapshots from a selected camera when a voice trigger word is detected."
+    echo "Saves timestamped images to a session folder."
+    echo ""
+    echo "Usage: snap.sh [OPTIONS]"
+    echo ""
+    echo "Options:"
+    echo "  --trigger WORD           Voice trigger word (default: snap)"
+    echo "  --delay SECONDS          Camera warmup delay (default: 0)"
+    echo "  --trigger-sound NAME     System sound for trigger (default: tink)"
+    echo "  --complete-sound NAME    System sound for completion (default: glass)"
+    echo "  --camera NAME            Camera device name (skip prompt)"
+    echo "                           Use quotes if name contains spaces"
+    echo "  --microphone ID          Microphone device ID (skip prompt)"
+    echo "  --output-dir PATH        Output folder (default: local/TIMESTAMP)"
+    echo "  -h, --help               Show this help message"
+    echo ""
+    exit "$exit_code"
+}
+
+require_value() {
+    local flag="$1"
+    local value="${2-}"
+    if [[ -z $value || $value == -* ]]; then
+        echo "Error: $flag requires a value" >&2
+        usage 1
+    fi
+}
+
+parse_flags() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --trigger)
+                require_value "$1" "$2"
+                TRIGGER="$2"
+                shift 2
+                ;;
+            --delay)
+                require_value "$1" "$2"
+                SNAPSHOT_DELAY="$2"
+                shift 2
+                ;;
+            --trigger-sound)
+                require_value "$1" "$2"
+                TRIGGER_SOUND="$2"
+                shift 2
+                ;;
+            --complete-sound)
+                require_value "$1" "$2"
+                SUCCESS_SOUND="$2"
+                shift 2
+                ;;
+            --camera)
+                require_value "$1" "$2"
+                CAMERA_NAME="$2"
+                shift 2
+                ;;
+            --microphone)
+                require_value "$1" "$2"
+                MICROPHONE_ID="$2"
+                shift 2
+                ;;
+            --output-dir)
+                require_value "$1" "$2"
+                OUTPUT_DIR="$2"
+                shift 2
+                ;;
+            -h|--help) usage ;;
+            *)
+                echo "Error: Unknown option: $1" >&2
+                usage 1
+                ;;
+        esac
+    done
+}
 
 check_dependencies() {
     local required_commands=("imagesnap" "hear")
@@ -76,14 +158,21 @@ prompt_selection() {
     echo "$user_selection"
 }
 
-parse_camera_name() {
-    echo "$1"
+list_cameras() {
+    imagesnap -l 2>&1 | grep -v WARNING | grep "^=>" | sed 's/^=> //'
 }
 
 get_camera_input() {
     local cameras
-    cameras=$(imagesnap -l 2>&1 | grep -v WARNING | grep "^=>" | sed 's/^=> //')
-    select_from_list "Select camera input:" "$cameras" parse_camera_name
+    cameras=$(list_cameras)
+    select_from_list "Select camera input:" "$cameras" echo
+}
+
+camera_exists() {
+    local camera_name="$1"
+    local cameras
+    cameras=$(list_cameras)
+    echo "$cameras" | grep -Fxq -- "$camera_name"
 }
 
 parse_microphone_id() {
@@ -96,10 +185,21 @@ parse_microphone_name() {
     echo "$device" | sed -E 's/^[0-9]+\. *//; s/ \(ID: .*\)$//'
 }
 
+list_microphones() {
+    hear --audio-input-devices 2>&1 | grep -E '^[0-9]+\.'
+}
+
 get_microphone_input() {
     local devices
-    devices=$(hear --audio-input-devices 2>&1 | grep -E '^[0-9]+\.')
+    devices=$(list_microphones)
     select_from_list "Select microphone input:" "$devices" parse_microphone_id parse_microphone_name
+}
+
+microphone_exists() {
+    local microphone_id="$1"
+    local devices
+    devices=$(list_microphones)
+    echo "$devices" | sed -E 's/.*\(ID: //; s/\)$//' | grep -Fxq -- "$microphone_id"
 }
 
 play_system_sound() {
@@ -136,26 +236,46 @@ run_snapshot_loop() {
     done
 }
 
+resolve_or_prompt() {
+    local label="$1"
+    local provided_value="$2"
+    local exists_func="$3"
+    local prompt_func="$4"
+
+    if [[ -n $provided_value ]]; then
+        if $exists_func "$provided_value"; then
+            echo "$provided_value"
+            return
+        fi
+
+        echo "$label not found: $provided_value" >&2
+    fi
+
+    $prompt_func
+}
+
 main() {
     echo "snap.sh"
     echo ""
 
     local selected_camera
-    selected_camera=$(get_camera_input)
+    selected_camera=$(resolve_or_prompt "Camera" "$CAMERA_NAME" camera_exists get_camera_input)
     echo
 
     local selected_microphone
-    selected_microphone=$(get_microphone_input)
+    selected_microphone=$(resolve_or_prompt "Microphone" "$MICROPHONE_ID" microphone_exists get_microphone_input)
     echo
 
-    local starting_timestamp
-    starting_timestamp=$(get_timestamp)
-    local output_dir="local/${starting_timestamp}"
+    local output_dir="${OUTPUT_DIR:-local/$(get_timestamp)}"
     mkdir -p "$output_dir"
 
     echo "Camera input:     $selected_camera"
     echo "Microphone input: $selected_microphone"
     echo "Output folder:    $output_dir"
+    echo "Trigger word:     $TRIGGER"
+    echo "Warmup delay:     $SNAPSHOT_DELAY"
+    echo "Trigger sound:    $TRIGGER_SOUND"
+    echo "Complete sound:   $SUCCESS_SOUND"
     echo
     echo "Press Ctrl+C to exit."
     echo
@@ -163,5 +283,6 @@ main() {
     run_snapshot_loop "$selected_camera" "$selected_microphone" "$output_dir"
 }
 
+parse_flags "$@"
 check_dependencies
-main "$@"
+main
