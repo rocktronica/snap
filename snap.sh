@@ -90,9 +90,10 @@ get_microphone_input() {
     echo "${microphone_array[$user_selection]}"
 }
 
-ring_a_bell() {
+play_system_sound() {
+    local sound_name="$1"
     if command -v afplay &> /dev/null; then
-        afplay /System/Library/Sounds/Glass.aiff 2>/dev/null & disown
+        afplay "/System/Library/Sounds/${sound_name}.aiff" 2>/dev/null & disown
     else
         echo -e '\a'
     fi
@@ -105,8 +106,9 @@ take_snapshot() {
     timestamp=$(date +"%Y%m%d_%H%M%S")
     local filename="${output_dir}/${timestamp}.jpg"
 
+    echo -n "Taking ${filename}..."
     imagesnap -w "$SNAPSHOT_DELAY" -q -d "$camera_name" "$filename" 2>/dev/null
-    echo -e "${GREEN}Snapshot saved as ${filename}${COLOR_RESET}"
+    echo -e " ${GREEN}Done.${COLOR_RESET}"
 }
 
 main() {
@@ -115,16 +117,17 @@ main() {
 
     local selected_camera
     selected_camera=$(get_camera_input)
+    echo
 
     local selected_microphone
     selected_microphone=$(get_microphone_input)
+    echo
 
     local starting_timestamp
     starting_timestamp=$(date +"%Y%m%d_%H%M%S")
     local output_dir="local/${starting_timestamp}"
     mkdir -p "$output_dir"
 
-    echo ""
     echo "Listening for \"${TRIGGER}\" on microphone \"$selected_microphone\"."
     echo "Taking snapshots with \"$selected_camera\" and saving to \"$output_dir\"."
     echo "Press Ctrl+C to exit."
@@ -132,8 +135,9 @@ main() {
 
     while true; do
         hear --exit-word "$TRIGGER" --input-device-id "$selected_microphone" >/dev/null 2>&1
+        play_system_sound tink
         take_snapshot "$selected_camera" "$output_dir"
-        ring_a_bell
+        play_system_sound glass
     done
 }
 
