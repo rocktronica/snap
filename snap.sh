@@ -1,69 +1,60 @@
 #!/bin/bash
 
-# Script name: snap.sh
-# Description: Brief description of what this script does
-# Author: $(whoami)
-# Date: $(date +%Y-%m-%d)
-
 set -euo pipefail
 
-# Colors for output (optional)
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+COLOR_RESET='\033[0m'
 
-# Error handling
-trap 'echo -e "${RED}Error: Script failed${NC}" >&2; exit 1' ERR
+trap 'echo -e "${RED}Error: Script failed${COLOR_RESET}" >&2; exit 1' ERR
 
-# Check for required dependencies
 check_dependencies() {
     if ! command -v imagesnap &> /dev/null; then
-        echo -e "${RED}Error: imagesnap is not installed${NC}" >&2
+        echo -e "${RED}Error: imagesnap is not installed${COLOR_RESET}" >&2
         exit 1
     fi
 }
 
-# Main function
-main() {
-    echo "snap.sh"
-    echo ""
-
-    # Get available camera inputs
+get_camera_input() {
     local cameras
     cameras=$(imagesnap -l 2>&1 | grep -v WARNING | grep "^=>" | sed 's/^=> //')
 
-    # Present as a numbered list
-    echo "Select camera input:"
+    echo "Select camera input:" >&2
     local -a camera_array
     local index=1
     while IFS= read -r camera; do
         camera_array[$index]="$camera"
-        echo "$index) $camera"
+        echo "$index) $camera" >&2
         ((index++))
     done <<< "$cameras"
 
-    # Wait for user selection with validation loop
-    local selection
-    local valid_selection=false
-    while [[ $valid_selection == false ]]; do
-        echo
-        read -p "Select a camera (1-$((index-1))): " selection
+    local user_selection
+    local selection_valid=false
+    while [[ $selection_valid == false ]]; do
+        echo >&2
+        read -p "Select a camera (1-$((index-1))): " user_selection
 
-        # Check if input is numeric and within range
-        if [[ $selection =~ ^[0-9]+$ ]] && [[ $selection -ge 1 && $selection -le $((index-1)) ]]; then
-            valid_selection=true
+        if [[ $user_selection =~ ^[0-9]+$ ]] && [[ $user_selection -ge 1 && $user_selection -le $((index-1)) ]]; then
+            selection_valid=true
         else
-            echo -e "${RED}Invalid input: please enter a number${NC}" >&2
+            echo -e "${RED}Invalid input: please enter a number between 1 and $((index-1))${COLOR_RESET}" >&2
         fi
     done
 
-    echo ""
-    echo "You chose ${camera_array[$selection]}"
+    echo "${camera_array[$user_selection]}"
 }
 
-# Check dependencies before running main
-check_dependencies
+main() {
+    echo "snap.sh"
+    echo ""
 
-# Run main function
+    local selected_camera
+    selected_camera=$(get_camera_input)
+
+    echo ""
+    echo "You chose $selected_camera"
+}
+
+check_dependencies
 main "$@"
