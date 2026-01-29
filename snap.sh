@@ -6,12 +6,23 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 COLOR_RESET='\033[0m'
+TRIGGER="snap"
+SNAPSHOT_DELAY=0
 
 trap 'echo -e "${RED}Error: Script failed${COLOR_RESET}" >&2; exit 1' ERR
 
 check_dependencies() {
-    if ! command -v imagesnap &> /dev/null; then
-        echo -e "${RED}Error: imagesnap is not installed${COLOR_RESET}" >&2
+    local required_commands=("imagesnap" "hear")
+    local missing_deps=()
+
+    for cmd in "${required_commands[@]}"; do
+        if ! command -v "$cmd" &> /dev/null; then
+            missing_deps+=("$cmd")
+        fi
+    done
+
+    if [[ ${#missing_deps[@]} -gt 0 ]]; then
+        echo -e "${RED}Error: Missing dependencies: ${missing_deps[*]}${COLOR_RESET}" >&2
         exit 1
     fi
 }
@@ -45,6 +56,25 @@ get_camera_input() {
     echo "${camera_array[$user_selection]}"
 }
 
+ring_a_bell() {
+    if command -v afplay &> /dev/null; then
+        afplay /System/Library/Sounds/Glass.aiff 2>/dev/null & disown
+    else
+        echo -e '\a'
+    fi
+}
+
+take_snapshot() {
+    local camera_name="$1"
+    local output_dir="$2"
+    local timestamp
+    timestamp=$(date +"%Y%m%d_%H%M%S")
+    local filename="${output_dir}/${timestamp}.jpg"
+
+    imagesnap -w "$SNAPSHOT_DELAY" -q -d "$camera_name" "$filename" 2>/dev/null
+    echo -e "${GREEN}Snapshot saved as ${filename}${COLOR_RESET}"
+}
+
 main() {
     echo "snap.sh"
     echo ""
@@ -54,6 +84,21 @@ main() {
 
     echo ""
     echo "You chose $selected_camera"
+    echo
+
+    local starting_timestamp
+    starting_timestamp=$(date +"%Y%m%d_%H%M%S")
+    local output_dir="local/${starting_timestamp}"
+    mkdir -p "$output_dir"
+
+    echo "Listening for \"${TRIGGER}\". Press Ctrl+C to exit."
+    echo
+
+    while true; do
+        hear --exit-word "$TRIGGER" >/dev/null 2>&1
+        take_snapshot "$selected_camera" "$output_dir"
+        ring_a_bell
+    done
 }
 
 check_dependencies
