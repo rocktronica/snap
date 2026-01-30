@@ -21,23 +21,8 @@ Then:
 
 ```
 ./snap.sh -h
-snap.sh - Voice-triggered camera snapshot tool
 
-Captures snapshots from a selected camera when a voice trigger word is detected.
-Saves timestamped images to a session folder.
-
-Usage: snap.sh [OPTIONS]
-
-Options:
-  --trigger WORD           Voice trigger word (default: snap)
-  --delay SECONDS          Camera warmup delay (default: 0)
-  --trigger-sound NAME     System sound for trigger (default: tink)
-  --complete-sound NAME    System sound for completion (default: glass)
-  --camera NAME            Camera device name (skip prompt)
-                           Use quotes if name contains spaces
-  --microphone ID          Microphone device ID (skip prompt)
-  --output-dir PATH        Output folder (default: local/TIMESTAMP)
-  -h, --help               Show this help message
+./snap.sh
 ```
 
 If not provided, `./snap.sh` will prompt from available camera and mic inputs.
@@ -45,11 +30,11 @@ If not provided, `./snap.sh` will prompt from available camera and mic inputs.
 Flag examples:
 
 ```bash
-./snap.sh --trigger "take a photo now" --trigger-sound "Ping" --complete-sound "Glass"
+./snap.sh --trigger "take my photo" --camera "Insta360 Link" --microphone 2
 ```
 
 ```bash
-./snap.sh --camera "Insta360 Link" --microphone 2 --output-dir ~/Pictures/snaps
+./snap.sh --timelapse 5 --output ~/Pictures/snaps
 ```
 
 ## License
