@@ -17,20 +17,17 @@ usage() {
     local exit_code="${1:-0}"
     echo "snap.sh - Voice-triggered camera snapshot tool"
     echo ""
-    echo "Captures snapshots from a selected camera when a voice trigger word is detected."
+    echo "Captures snapshots from a selected camera when a voice trigger phrase is detected."
     echo "Saves timestamped images to a session folder."
     echo ""
     echo "Usage: snap.sh [OPTIONS]"
     echo ""
     echo "Options:"
-    echo "  --trigger WORD           Voice trigger word (default: snap)"
-    echo "  --delay SECONDS          Camera warmup delay (default: 0)"
-    echo "  --trigger-sound NAME     System sound for trigger (default: tink)"
-    echo "  --complete-sound NAME    System sound for completion (default: glass)"
+    echo "  --trigger PHRASE         Voice trigger phrase (default: snap)"
     echo "  --camera NAME            Camera device name (skip prompt)"
     echo "                           Use quotes if name contains spaces"
     echo "  --microphone ID          Microphone device ID (skip prompt)"
-    echo "  --output-dir PATH        Output folder (default: local/TIMESTAMP)"
+    echo "  --output PATH            Output folder (default: local/TIMESTAMP)"
     echo "  -h, --help               Show this help message"
     echo ""
     exit "$exit_code"
@@ -53,21 +50,6 @@ parse_flags() {
                 TRIGGER="$2"
                 shift 2
                 ;;
-            --delay)
-                require_value "$1" "$2"
-                SNAPSHOT_DELAY="$2"
-                shift 2
-                ;;
-            --trigger-sound)
-                require_value "$1" "$2"
-                TRIGGER_SOUND="$2"
-                shift 2
-                ;;
-            --complete-sound)
-                require_value "$1" "$2"
-                SUCCESS_SOUND="$2"
-                shift 2
-                ;;
             --camera)
                 require_value "$1" "$2"
                 CAMERA_NAME="$2"
@@ -78,7 +60,7 @@ parse_flags() {
                 MICROPHONE_ID="$2"
                 shift 2
                 ;;
-            --output-dir)
+            --output)
                 require_value "$1" "$2"
                 OUTPUT_DIR="$2"
                 shift 2
@@ -276,10 +258,7 @@ main() {
     echo "Camera input:     $selected_camera"
     echo "Microphone input: $selected_microphone"
     echo "Output folder:    $output_dir"
-    echo "Trigger word:     $TRIGGER"
-    echo "Warmup delay:     $SNAPSHOT_DELAY"
-    echo "Trigger sound:    $TRIGGER_SOUND"
-    echo "Complete sound:   $SUCCESS_SOUND"
+    echo "Trigger phrase:   $TRIGGER"
     echo
     echo "Press Ctrl+C to exit."
     echo
