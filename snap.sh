@@ -4,6 +4,7 @@ set -euo pipefail
 
 TRIGGER="snap"
 SNAPSHOT_DELAY=0
+TIMELAPSE_DELAY=0
 TRIGGER_SOUND="tink"
 SUCCESS_SOUND="glass"
 BUILTIN_MICROPHONE="BuiltInMicrophoneDevice"
@@ -27,6 +28,7 @@ usage() {
     echo "  --camera NAME            Camera device name (skip prompt)"
     echo "                           Use quotes if name contains spaces"
     echo "  --microphone ID          Microphone device ID (skip prompt)"
+    echo "  --timelapse SECONDS      Delay between snapshots (default: 0, no timelapse)"
     echo "  --output PATH            Output folder (default: local/TIMESTAMP)"
     echo "  -h, --help               Show this help message"
     echo ""
@@ -58,6 +60,11 @@ parse_flags() {
             --microphone)
                 require_value "$1" "$2"
                 MICROPHONE_ID="$2"
+                shift 2
+                ;;
+            --timelapse)
+                require_value "$1" "$2"
+                TIMELAPSE_DELAY="$2"
                 shift 2
                 ;;
             --output)
@@ -215,7 +222,8 @@ run_snapshot_loop() {
     local output_dir="$3"
 
     while true; do
-        hear --exit-word "$TRIGGER" --input-device-id "$selected_microphone" >/dev/null 2>&1
+        hear --exit-word "$TRIGGER" --timeout "$TIMELAPSE_DELAY" \
+            --input-device-id "$selected_microphone" >/dev/null 2>&1
         play_system_sound "$TRIGGER_SOUND"
         take_snapshot "$selected_camera" "$output_dir"
         play_system_sound "$SUCCESS_SOUND"
