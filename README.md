@@ -37,6 +37,10 @@ Flag examples:
 ./snap.sh --timelapse 5 --output ~/Pictures/snaps
 ```
 
+## Known Issues
+
+- Running multiple `snap.sh` instances on the same microphone causes the second instance to fail silently (microphone access conflict with the `hear` command)
+
 ## License
 
 MIT License – See [LICENSE](LICENSE) file for details.
