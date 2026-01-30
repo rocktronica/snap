@@ -6,6 +6,7 @@ TRIGGER="snap"
 SNAPSHOT_DELAY=0
 TRIGGER_SOUND="tink"
 SUCCESS_SOUND="glass"
+BUILTIN_MICROPHONE="BuiltInMicrophoneDevice"
 CAMERA_NAME=""
 MICROPHONE_ID=""
 OUTPUT_DIR=""
@@ -186,7 +187,10 @@ parse_microphone_name() {
 }
 
 list_microphones() {
-    hear --audio-input-devices 2>&1 | grep -E '^[0-9]+\.'
+    local all_devices
+    all_devices=$(hear --audio-input-devices 2>&1 | grep -E '^[0-9]+\.')
+    echo "$all_devices" | grep "$BUILTIN_MICROPHONE"
+    echo "$all_devices" | grep -v "$BUILTIN_MICROPHONE"
 }
 
 get_microphone_input() {
