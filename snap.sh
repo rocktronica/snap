@@ -7,6 +7,7 @@ SNAPSHOT_DELAY=0
 TIMELAPSE_DELAY=0
 TRIGGER_SOUND="tink"
 SUCCESS_SOUND="glass"
+SCREEN_PREFIX="Screen"
 BUILTIN_MICROPHONE="BuiltInMicrophoneDevice"
 CAMERA_NAME=""
 MICROPHONE_ID=""
@@ -148,21 +149,41 @@ prompt_selection() {
     echo "$user_selection"
 }
 
-list_cameras() {
+list_photo_inputs() {
     imagesnap -l 2>&1 | grep -v WARNING | grep "^=>" | sed 's/^=> //'
+    list_screens
 }
 
-get_camera_input() {
-    local cameras
-    cameras=$(list_cameras)
-    select_from_list "Select camera input:" "$cameras" echo
+get_display_count() {
+    local display_count
+    display_count=$(system_profiler SPDisplaysDataType 2>/dev/null | awk '/Resolution:/{count++} END {print count+0}')
+    if [[ $display_count -lt 1 ]]; then
+        display_count=1
+    fi
+    echo "$display_count"
 }
 
-camera_exists() {
-    local camera_name="$1"
-    local cameras
-    cameras=$(list_cameras)
-    echo "$cameras" | grep -Fxq -- "$camera_name"
+list_screens() {
+    local display_count
+    display_count=$(get_display_count)
+
+    local i
+    for ((i=1; i<=display_count; i++)); do
+        echo "$SCREEN_PREFIX $i"
+    done
+}
+
+get_photo_input() {
+    local photo_inputs
+    photo_inputs=$(list_photo_inputs)
+    select_from_list "Select photo input:" "$photo_inputs" echo
+}
+
+photo_input_exists() {
+    local photo_input_name="$1"
+    local photo_inputs
+    photo_inputs=$(list_photo_inputs)
+    echo "$photo_inputs" | grep -Fxq -- "$photo_input_name"
 }
 
 parse_microphone_id() {
@@ -212,12 +233,22 @@ take_snapshot() {
     local filename="${output_dir}/${timestamp}.jpg"
 
     echo -n "Taking ${filename}..."
-    imagesnap -w "$SNAPSHOT_DELAY" -q -d "$camera_name" "$filename" 2>/dev/null
+    if [[ $camera_name == "$SCREEN_PREFIX"* ]]; then
+        local display_id
+        display_id=$(echo "$camera_name" | sed -n "s/^${SCREEN_PREFIX} \([0-9][0-9]*\)$/\1/p")
+        if [[ -n $display_id ]]; then
+            screencapture -x -D "$display_id" "$filename"
+        else
+            screencapture -x "$filename"
+        fi
+    else
+        imagesnap -w "$SNAPSHOT_DELAY" -q -d "$camera_name" "$filename" 2>/dev/null
+    fi
     echo " Done."
 }
 
 run_snapshot_loop() {
-    local selected_camera="$1"
+    local selected_photo_input="$1"
     local selected_microphone="$2"
     local output_dir="$3"
 
@@ -225,7 +256,7 @@ run_snapshot_loop() {
         hear --exit-word "$TRIGGER" --timeout "$TIMELAPSE_DELAY" \
             --input-device-id "$selected_microphone" >/dev/null 2>&1
         play_system_sound "$TRIGGER_SOUND"
-        take_snapshot "$selected_camera" "$output_dir"
+        take_snapshot "$selected_photo_input" "$output_dir"
         play_system_sound "$SUCCESS_SOUND"
     done
 }
@@ -252,8 +283,8 @@ main() {
     echo "snap.sh"
     echo ""
 
-    local selected_camera
-    selected_camera=$(resolve_or_prompt "Camera" "$CAMERA_NAME" camera_exists get_camera_input)
+    local selected_photo_input
+    selected_photo_input=$(resolve_or_prompt "Photo input" "$CAMERA_NAME" photo_input_exists get_photo_input)
     echo
 
     local selected_microphone
@@ -263,7 +294,7 @@ main() {
     local output_dir="${OUTPUT_DIR:-local/$(get_timestamp)}"
     mkdir -p "$output_dir"
 
-    echo "Camera input:     $selected_camera"
+    echo "Photo input:      $selected_photo_input"
     echo "Microphone input: $selected_microphone"
     echo "Output folder:    $output_dir"
     echo "Trigger phrase:   $TRIGGER"
@@ -271,7 +302,7 @@ main() {
     echo "Press Ctrl+C to exit."
     echo
 
-    run_snapshot_loop "$selected_camera" "$selected_microphone" "$output_dir"
+    run_snapshot_loop "$selected_photo_input" "$selected_microphone" "$output_dir"
 }
 
 parse_flags "$@"
